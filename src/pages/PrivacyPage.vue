@@ -6,7 +6,7 @@ import Container from "../components/Container.vue";
 
 <template>
   <Header/>
-  <Container class="px-2 legal">
+  <Container class="px-2 mt-3 legal">
     <h1>Privacy Policy</h1>
     <p><b>Last Modified:</b> August 3, 2025</p>
     <p>

@@ -8,6 +8,10 @@ export interface User {
     discord_id?: string | null;
 }
 
+const CLIENT_ID = "1398022313877704764";
+const REDIRECT_URI = `${window.location.origin}/auth/discord`;
+const DISCORD_AUTH_URL = `https://discord.com/oauth2/authorize?client_id=${CLIENT_ID}&response_type=code&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&scope=identify`;
+
 export default class SessionManager {
     private static loading: boolean = false;
 
@@ -59,5 +63,9 @@ export default class SessionManager {
         sessionStorage.removeItem('user');
         document.cookie = 'auth_role=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/';
         useRouter().replace({path: '/'});
+    }
+
+    public static beginDiscordAuth(): void {
+        window.location.href = DISCORD_AUTH_URL;
     }
 }

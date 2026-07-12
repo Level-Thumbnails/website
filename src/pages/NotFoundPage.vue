@@ -35,6 +35,8 @@ import Container from "../components/Container.vue";
 .not-found {
   text-align: center;
   padding: 50px;
+  margin-top: 100px;
+  margin-bottom: 40px;
 }
 
 .level-playback {

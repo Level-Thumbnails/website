@@ -70,15 +70,17 @@ watch(() => props.value, (newValue) => {
     });
   }
 });
+
+const numberFormatter = new Intl.NumberFormat('en-US', {
+  minimumFractionDigits: props.decimals ?? 0,
+  maximumFractionDigits: props.decimals ?? 0
+});
 </script>
 
 <template>
   <span ref="statSection" class="counter">
     {{
-      counter.toLocaleString(undefined, {
-        minimumFractionDigits: props.decimals ?? 0,
-        maximumFractionDigits: props.decimals ?? 0
-      })
+      numberFormatter.format(counter)
     }}
   </span>
 </template>
