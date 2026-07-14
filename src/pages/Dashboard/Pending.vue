@@ -22,7 +22,8 @@ const REJECT_PRESETS = [
   "No Glow",
   "No Particles",
   "Cutoff Deco",
-  "Title Card"
+  "Title Card",
+  "Good thumbnail already accepted"
 ];
 
 const loading = ref(true);
