@@ -23,7 +23,8 @@ const REJECT_PRESETS = [
   "No Particles",
   "Cutoff Deco",
   "Title Card",
-  "Good thumbnail already accepted"
+  "Good thumbnail already accepted",
+  "Solid Wave Trail"
 ];
 
 const loading = ref(true);
