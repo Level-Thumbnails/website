@@ -80,7 +80,7 @@ if (hasServerSettingsPerms()) {
       });
 }
 
-async function updateServerSettings() {
+async function updateServerSettings(silent: boolean) {
   if (!pendingSettings.value) return;
 
   try {
@@ -89,7 +89,7 @@ async function updateServerSettings() {
       headers: {
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify(pendingSettings.value)
+      body: JSON.stringify({...pendingSettings.value, "stealth": silent})
     });
 
     settings.value = {...pendingSettings.value};
@@ -149,9 +149,13 @@ watch(userSettings, (newSettings) => {
                placeholder="e.g. v2.1.0" pattern="^v\d+\.\d+\.\d+(?:-(?:alpha|beta|prerelease|pr)(?:\.\d+)?)?$" />
       </div>
       <div class="d-flex gap-1 mt-1">
-        <button class="btn btn-primary flex-1" @click="updateServerSettings"
+        <button class="btn btn-primary flex-1" @click="updateServerSettings(false)"
                 :disabled="JSON.stringify(settings) === JSON.stringify(pendingSettings)">
           Save Changes
+        </button>
+        <button class="btn btn-secondary flex-1" @click="updateServerSettings(true)"
+                :disabled="JSON.stringify(settings) === JSON.stringify(pendingSettings)">
+          Save Silently
         </button>
       </div>
     </section>
