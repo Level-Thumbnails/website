@@ -1,16 +1,17 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue';
+import {computed, onMounted, ref, watch} from 'vue';
 import LoadingCircle from '../../components/LoadingCircle.vue';
 import Modal from '../../components/Modal.vue';
 import type {
   MyThumbnailActiveItem,
   MyThumbnailRejectedItem,
+  MyThumbnailReplacedItem,
   PendingItem,
   MyUploadsSummaryResponse,
 } from '../../lib/types';
-import { fetchJson, formatDateTime, unwrap } from '../../lib/utils';
+import {fetchJson, formatDateTime, unwrap} from '../../lib/utils';
 
-type ThumbnailTab = 'active' | 'pending' | 'rejected';
+type ThumbnailTab = 'active' | 'pending' | 'replaced' | 'rejected';
 
 const PAGE_SIZE = 12;
 
@@ -21,17 +22,21 @@ const currentTab = ref<ThumbnailTab>('active');
 
 const activePage = ref(1);
 const pendingPage = ref(1);
+const replacedPage = ref(1);
 const rejectedPage = ref(1);
 const activePageInput = ref('');
 const pendingPageInput = ref('');
+const replacedPageInput = ref('');
 const rejectedPageInput = ref('');
 
 const activeItems = ref<MyThumbnailActiveItem[]>([]);
 const pendingItems = ref<PendingItem[]>([]);
+const replacedItems = ref<MyThumbnailReplacedItem[]>([]);
 const rejectedItems = ref<MyThumbnailRejectedItem[]>([]);
 
 const activeTotal = ref(0);
 const pendingTotal = ref(0);
+const replacedTotal = ref(0);
 const rejectedTotal = ref(0);
 
 const levelIdSearch = ref('');
@@ -46,13 +51,14 @@ function totalPages(total: number) {
 
 const activeTotalPages = computed(() => totalPages(activeTotal.value));
 const pendingTotalPages = computed(() => totalPages(pendingTotal.value));
+const replacedTotalPages = computed(() => totalPages(replacedTotal.value));
 const rejectedTotalPages = computed(() => totalPages(rejectedTotal.value));
 
-function levelTitle(level: MyThumbnailActiveItem | PendingItem | MyThumbnailRejectedItem): string {
+function levelTitle(level: MyThumbnailActiveItem | PendingItem | MyThumbnailRejectedItem | MyThumbnailReplacedItem): string {
   return level.note_data?.level_name || `ID: ${level.level_id}`;
 }
 
-function levelAuthor(level: MyThumbnailActiveItem | PendingItem | MyThumbnailRejectedItem): string | null {
+function levelAuthor(level: MyThumbnailActiveItem | PendingItem | MyThumbnailRejectedItem | MyThumbnailReplacedItem): string | null {
   return level.note_data?.creator_name || null;
 }
 
@@ -72,17 +78,21 @@ function uploadsQuery(page: number) {
   return new URLSearchParams({
     page: page.toString(),
     per_page: PAGE_SIZE.toString(),
-    ...(levelIdSearch.value && { level_id_search: levelIdSearch.value }),
+    ...(levelIdSearch.value && {level_id_search: levelIdSearch.value}),
   });
 }
 
 function currentTabPage() {
-  return currentTab.value === 'active' ? activePage.value : currentTab.value === 'pending' ? pendingPage.value : rejectedPage.value;
+  return currentTab.value === 'active' ? activePage.value
+      : currentTab.value === 'pending' ? pendingPage.value
+          : currentTab.value === 'replaced' ? replacedPage.value
+              : rejectedPage.value;
 }
 
 function currentTabEndpoint(tab: ThumbnailTab) {
   if (tab === 'active') return '/user/me/uploads/active';
   if (tab === 'pending') return '/user/me/uploads/pending';
+  if (tab === 'replaced') return '/user/me/uploads/replaced';
   return '/user/me/uploads/rejected';
 }
 
@@ -91,13 +101,14 @@ async function fetchUploadSummary() {
   const summary = unwrap<MyUploadsSummaryResponse>(payload);
   activeTotal.value = summary.active;
   pendingTotal.value = summary.pending;
+  replacedTotal.value = summary.replaced;
   rejectedTotal.value = summary.rejected;
 }
 
 async function fetchTabUploads(tab: ThumbnailTab, page = currentTabPage()) {
   const payload = await fetchJson(`${currentTabEndpoint(tab)}?${uploadsQuery(page).toString()}`);
   return unwrap<UploadsPageResponse<
-    MyThumbnailActiveItem | PendingItem | MyThumbnailRejectedItem
+      MyThumbnailActiveItem | PendingItem | MyThumbnailRejectedItem | MyThumbnailReplacedItem
   >>(payload);
 }
 
@@ -136,6 +147,10 @@ async function refreshCurrentTab(includeSummary = false) {
       pendingItems.value = data.uploads as PendingItem[];
       pendingTotal.value = data.total;
       pendingPage.value = data.page;
+    } else if (currentTab.value === 'replaced') {
+      replacedItems.value = data.uploads as MyThumbnailReplacedItem[];
+      replacedTotal.value = data.total;
+      replacedPage.value = data.page;
     } else {
       rejectedItems.value = data.uploads as MyThumbnailRejectedItem[];
       rejectedTotal.value = data.total;
@@ -149,13 +164,17 @@ async function refreshCurrentTab(includeSummary = false) {
 }
 
 function goToPage(tab: ThumbnailTab, page: number) {
-  const limit = tab === 'active' ? activeTotalPages.value : tab === 'pending' ? pendingTotalPages.value : rejectedTotalPages.value;
+  const limit = tab === 'active' ? activeTotalPages.value
+      : tab === 'pending' ? pendingTotalPages.value
+          : tab === 'replaced' ? replacedTotalPages.value
+              : rejectedTotalPages.value;
 
   if (page < 1 || page > limit) return;
 
   if (tab === 'active') activePage.value = page;
   if (tab === 'pending') pendingPage.value = page;
   if (tab === 'rejected') rejectedPage.value = page;
+  if (tab === 'replaced') replacedPage.value = page;
 
   void refreshCurrentTab();
 }
@@ -165,15 +184,26 @@ function goToFirstPage(tab: ThumbnailTab) {
 }
 
 function goToLastPage(tab: ThumbnailTab) {
-  const total = tab === 'active' ? activeTotalPages.value : tab === 'pending' ? pendingTotalPages.value : rejectedTotalPages.value;
+  const total = tab === 'active' ? activeTotalPages.value
+      : tab === 'pending' ? pendingTotalPages.value
+          : tab === 'replaced' ? replacedTotalPages.value
+              : rejectedTotalPages.value;
+
   goToPage(tab, total);
 }
 
 function handlePageInput(tab: ThumbnailTab) {
-  const raw = tab === 'active' ? activePageInput.value : tab === 'pending' ? pendingPageInput.value : rejectedPageInput.value;
-  const page = parseInt(raw, 10);
-  const limit = tab === 'active' ? activeTotalPages.value : tab === 'pending' ? pendingTotalPages.value : rejectedTotalPages.value;
+  const raw = tab === 'active' ? activePageInput.value
+      : tab === 'pending' ? pendingPageInput.value
+          : tab === 'replaced' ? replacedPageInput.value
+              : rejectedPageInput.value;
 
+  const limit = tab === 'active' ? activeTotalPages.value
+      : tab === 'pending' ? pendingTotalPages.value
+          : tab === 'replaced' ? replacedTotalPages.value
+              : rejectedTotalPages.value;
+
+  const page = parseInt(raw, 10);
   if (!Number.isNaN(page) && page >= 1 && page <= limit) {
     goToPage(tab, page);
   }
@@ -184,9 +214,10 @@ function handlePageInput(tab: ThumbnailTab) {
 }
 
 function pageInfo(tab: ThumbnailTab) {
-  if (tab === 'active') return { page: activePage.value, totalPages: activeTotalPages.value };
-  if (tab === 'pending') return { page: pendingPage.value, totalPages: pendingTotalPages.value };
-  return { page: rejectedPage.value, totalPages: rejectedTotalPages.value };
+  if (tab === 'active') return {page: activePage.value, totalPages: activeTotalPages.value};
+  if (tab === 'pending') return {page: pendingPage.value, totalPages: pendingTotalPages.value};
+  if (tab === 'replaced') return {page: replacedPage.value, totalPages: replacedTotalPages.value};
+  return {page: rejectedPage.value, totalPages: rejectedTotalPages.value};
 }
 
 function setTab(tab: ThumbnailTab) {
@@ -230,12 +261,12 @@ onMounted(() => {
 
 <template>
   <div v-if="loading" class="d-flex flex-middle h-100">
-    <LoadingCircle />
+    <LoadingCircle/>
   </div>
 
   <div v-else class="my-thumbnails page-transition">
     <div v-if="error" class="notice notice-error">
-      <img src="/error.svg" alt="Error Icon" class="notice-icon" />
+      <img src="/error.svg" alt="Error Icon" class="notice-icon"/>
       <p>{{ error }}</p>
     </div>
 
@@ -243,21 +274,26 @@ onMounted(() => {
       <div>
         <p class="eyebrow">My Thumbnails</p>
         <h2>Your uploads at a glance</h2>
-        <p class="hero-copy">Track active thumbnails, pending submissions, and rejected uploads.</p>
+        <p class="hero-copy">Track active thumbnails, pending submissions, replaced and rejected uploads.</p>
       </div>
       <div class="hero-metrics">
         <div class="hero-metric">
-          <img src="/icons/check.svg" alt="Active" class="metric-icon" />
+          <img src="/icons/check.svg" alt="Active" class="metric-icon"/>
           <span class="metric-label">Active</span>
           <strong>{{ activeTotal }}</strong>
         </div>
         <div class="hero-metric">
-          <img src="/icons/pending2.svg" alt="Pending" class="metric-icon" />
+          <img src="/icons/pending2.svg" alt="Pending" class="metric-icon"/>
           <span class="metric-label">Pending</span>
           <strong>{{ pendingTotal }}</strong>
         </div>
         <div class="hero-metric">
-          <img src="/icons/cross.svg" alt="Rejected" class="metric-icon" />
+          <img src="/icons/replacement.svg" alt="Replaced" class="metric-icon"/>
+          <span class="metric-label">Replaced</span>
+          <strong>{{ replacedTotal }}</strong>
+        </div>
+        <div class="hero-metric">
+          <img src="/icons/cross.svg" alt="Rejected" class="metric-icon"/>
           <span class="metric-label">Rejected</span>
           <strong>{{ rejectedTotal }}</strong>
         </div>
@@ -267,27 +303,31 @@ onMounted(() => {
     <nav class="tab-bar card" aria-label="Thumbnail categories">
       <div class="tab-buttons">
         <button class="tab-button" :class="{ active: currentTab === 'active' }" @click="setTab('active')">
-          <img src="/icons/check.svg" alt="Active" class="tab-icon" />
+          <img src="/icons/check.svg" alt="Active" class="tab-icon"/>
           Active <span>{{ activeTotal }}</span>
         </button>
         <button class="tab-button" :class="{ active: currentTab === 'pending' }" @click="setTab('pending')">
-          <img src="/icons/pending2.svg" alt="Pending" class="tab-icon" />
+          <img src="/icons/pending2.svg" alt="Pending" class="tab-icon"/>
           Pending <span>{{ pendingTotal }}</span>
         </button>
+        <button class="tab-button" :class="{ active: currentTab === 'replaced' }" @click="setTab('replaced')">
+          <img src="/icons/replacement.svg" alt="Replacement" class="tab-icon"/>
+          Replaced <span>{{ replacedTotal }}</span>
+        </button>
         <button class="tab-button" :class="{ active: currentTab === 'rejected' }" @click="setTab('rejected')">
-          <img src="/icons/cross.svg" alt="Rejected" class="tab-icon" />
+          <img src="/icons/cross.svg" alt="Rejected" class="tab-icon"/>
           Rejected <span>{{ rejectedTotal }}</span>
         </button>
       </div>
 
       <div class="tab-filter">
         <input
-          id="levelIdSearch"
-          v-model="levelIdSearch"
-          type="text"
-          inputmode="numeric"
-          placeholder="Filter by level ID"
-          class="filter-input"
+            id="levelIdSearch"
+            v-model="levelIdSearch"
+            type="text"
+            inputmode="numeric"
+            placeholder="Filter by level ID"
+            class="filter-input"
         />
       </div>
     </nav>
@@ -296,7 +336,7 @@ onMounted(() => {
       <div class="card-head">
         <div>
           <h3>
-            <img src="/icons/check.svg" alt="Active" class="section-icon" />
+            <img src="/icons/check.svg" alt="Active" class="section-icon"/>
             Currently active thumbnails
           </h3>
           <p class="section-copy">These are thumbnails that are currently visible to everyone.</p>
@@ -310,11 +350,12 @@ onMounted(() => {
       <div class="thumbnail-grid">
         <article v-for="item in activeItems" :key="item.id" class="thumbnail-card">
           <button
-            type="button"
-            class="thumbnail-link"
-            @click="openPreview(getActiveFullImageUrl(item.level_id), levelTitle(item))"
+              type="button"
+              class="thumbnail-link"
+              @click="openPreview(getActiveFullImageUrl(item.level_id), levelTitle(item))"
           >
-            <img :src="getActiveImageUrl(item.level_id)" :alt="`Level ${item.level_id}`" class="thumbnail-image" loading="lazy" />
+            <img :src="getActiveImageUrl(item.level_id)" :alt="`Level ${item.level_id}`" class="thumbnail-image"
+                 loading="lazy"/>
           </button>
           <div class="thumbnail-content">
             <strong class="level-heading">
@@ -323,16 +364,16 @@ onMounted(() => {
             </strong>
             <span v-if="item.note_data" class="level-id-line">ID: {{ item.level_id }}</span>
             <span v-if="sameTimestamp(item.upload_time, item.accepted_time)" class="muted timeline-line">
-              <img src="/icons/check.svg" alt="Accepted" class="inline-icon" />
+              <img src="/icons/check.svg" alt="Accepted" class="inline-icon"/>
               Uploaded {{ formatDateTime(item.upload_time) }}
             </span>
             <template v-else>
               <span class="muted timeline-line">
-                <img src="/icons/upload.svg" alt="Uploaded" class="inline-icon" />
+                <img src="/icons/upload.svg" alt="Uploaded" class="inline-icon"/>
                 Uploaded {{ formatDateTime(item.upload_time) }}
               </span>
               <span v-if="item.accepted_time" class="muted timeline-line">
-                <img src="/icons/check.svg" alt="Accepted" class="inline-icon" />
+                <img src="/icons/check.svg" alt="Accepted" class="inline-icon"/>
                 Accepted {{ formatDateTime(item.accepted_time) }}
               </span>
             </template>
@@ -341,21 +382,27 @@ onMounted(() => {
       </div>
 
       <div class="pagination-controls" v-if="activeTotalPages > 1">
-        <button class="btn btn-secondary btn-sm" title="First page" :disabled="pageInfo('active').page === 1" @click="goToFirstPage('active')">
-          <img src="/icons/first.svg" alt="⏮" class="nav-icon" />
+        <button class="btn btn-secondary btn-sm" title="First page" :disabled="pageInfo('active').page === 1"
+                @click="goToFirstPage('active')">
+          <img src="/icons/first.svg" alt="⏮" class="nav-icon"/>
         </button>
-        <button class="btn btn-secondary btn-sm" :disabled="pageInfo('active').page === 1" @click="goToPage('active', pageInfo('active').page - 1)">
-          <img src="/icons/previous.svg" alt="◂" class="nav-icon" />
+        <button class="btn btn-secondary btn-sm" :disabled="pageInfo('active').page === 1"
+                @click="goToPage('active', pageInfo('active').page - 1)">
+          <img src="/icons/previous.svg" alt="◂" class="nav-icon"/>
         </button>
         <span class="page-info">Page {{ pageInfo('active').page }} of {{ pageInfo('active').totalPages }}</span>
-        <button class="btn btn-secondary btn-sm" :disabled="pageInfo('active').page === pageInfo('active').totalPages" @click="goToPage('active', pageInfo('active').page + 1)">
-          <img src="/icons/next.svg" alt="▸" class="nav-icon" />
+        <button class="btn btn-secondary btn-sm" :disabled="pageInfo('active').page === pageInfo('active').totalPages"
+                @click="goToPage('active', pageInfo('active').page + 1)">
+          <img src="/icons/next.svg" alt="▸" class="nav-icon"/>
         </button>
-        <button class="btn btn-secondary btn-sm" title="Last page" :disabled="pageInfo('active').page === pageInfo('active').totalPages" @click="goToLastPage('active')">
-          <img src="/icons/last.svg" alt="⏭" class="nav-icon" />
+        <button class="btn btn-secondary btn-sm" title="Last page"
+                :disabled="pageInfo('active').page === pageInfo('active').totalPages" @click="goToLastPage('active')">
+          <img src="/icons/last.svg" alt="⏭" class="nav-icon"/>
         </button>
-        <input v-model="activePageInput" class="page-input" type="number" placeholder="Go to..." min="1" :max="pageInfo('active').totalPages" @keyup.enter="handlePageInput('active')" />
-        <button class="btn btn-secondary btn-sm" :disabled="!activePageInput" @click="handlePageInput('active')">Go</button>
+        <input v-model="activePageInput" class="page-input" type="number" placeholder="Go to..." min="1"
+               :max="pageInfo('active').totalPages" @keyup.enter="handlePageInput('active')"/>
+        <button class="btn btn-secondary btn-sm" :disabled="!activePageInput" @click="handlePageInput('active')">Go
+        </button>
       </div>
     </section>
 
@@ -363,7 +410,7 @@ onMounted(() => {
       <div class="card-head">
         <div>
           <h3>
-            <img src="/icons/pending2.svg" alt="Pending" class="section-icon" />
+            <img src="/icons/pending2.svg" alt="Pending" class="section-icon"/>
             Pending uploads
           </h3>
           <p class="section-copy">These uploads are waiting for moderation.</p>
@@ -377,11 +424,12 @@ onMounted(() => {
       <div v-else class="thumbnail-grid">
         <article v-for="item in pendingItems" :key="item.id" class="thumbnail-card pending-card">
           <button
-            type="button"
-            class="thumbnail-link"
-            @click="openPreview(getPendingImageUrl(item.id), levelTitle(item))"
+              type="button"
+              class="thumbnail-link"
+              @click="openPreview(getPendingImageUrl(item.id), levelTitle(item))"
           >
-            <img :src="getPendingImageUrl(item.id)" :alt="`Pending upload ${item.id}`" class="thumbnail-image" loading="lazy" />
+            <img :src="getPendingImageUrl(item.id)" :alt="`Pending upload ${item.id}`" class="thumbnail-image"
+                 loading="lazy"/>
           </button>
           <div class="thumbnail-content">
             <strong class="level-heading">
@@ -390,7 +438,7 @@ onMounted(() => {
             </strong>
             <span v-if="item.note_data" class="level-id-line">ID: {{ item.level_id }}</span>
             <span class="muted timeline-line">
-              <img src="/icons/upload.svg" alt="Submitted" class="inline-icon" />
+              <img src="/icons/upload.svg" alt="Submitted" class="inline-icon"/>
               Submitted {{ formatDateTime(item.upload_time) }}
             </span>
           </div>
@@ -398,21 +446,139 @@ onMounted(() => {
       </div>
 
       <div class="pagination-controls" v-if="pendingTotalPages > 1">
-        <button class="btn btn-secondary btn-sm" title="First page" :disabled="pageInfo('pending').page === 1" @click="goToFirstPage('pending')">
-          <img src="/icons/first.svg" alt="⏮" class="nav-icon" />
+        <button class="btn btn-secondary btn-sm" title="First page" :disabled="pageInfo('pending').page === 1"
+                @click="goToFirstPage('pending')">
+          <img src="/icons/first.svg" alt="⏮" class="nav-icon"/>
         </button>
-        <button class="btn btn-secondary btn-sm" :disabled="pageInfo('pending').page === 1" @click="goToPage('pending', pageInfo('pending').page - 1)">
-          <img src="/icons/previous.svg" alt="◂" class="nav-icon" />
+        <button class="btn btn-secondary btn-sm" :disabled="pageInfo('pending').page === 1"
+                @click="goToPage('pending', pageInfo('pending').page - 1)">
+          <img src="/icons/previous.svg" alt="◂" class="nav-icon"/>
         </button>
         <span class="page-info">Page {{ pageInfo('pending').page }} of {{ pageInfo('pending').totalPages }}</span>
-        <button class="btn btn-secondary btn-sm" :disabled="pageInfo('pending').page === pageInfo('pending').totalPages" @click="goToPage('pending', pageInfo('pending').page + 1)">
-          <img src="/icons/next.svg" alt="▸" class="nav-icon" />
+        <button class="btn btn-secondary btn-sm" :disabled="pageInfo('pending').page === pageInfo('pending').totalPages"
+                @click="goToPage('pending', pageInfo('pending').page + 1)">
+          <img src="/icons/next.svg" alt="▸" class="nav-icon"/>
         </button>
-        <button class="btn btn-secondary btn-sm" title="Last page" :disabled="pageInfo('pending').page === pageInfo('pending').totalPages" @click="goToLastPage('pending')">
-          <img src="/icons/last.svg" alt="⏭" class="nav-icon" />
+        <button class="btn btn-secondary btn-sm" title="Last page"
+                :disabled="pageInfo('pending').page === pageInfo('pending').totalPages"
+                @click="goToLastPage('pending')">
+          <img src="/icons/last.svg" alt="⏭" class="nav-icon"/>
         </button>
-        <input v-model="pendingPageInput" class="page-input" type="number" placeholder="Go to..." min="1" :max="pageInfo('pending').totalPages" @keyup.enter="handlePageInput('pending')" />
-        <button class="btn btn-secondary btn-sm" :disabled="!pendingPageInput" @click="handlePageInput('pending')">Go</button>
+        <input v-model="pendingPageInput" class="page-input" type="number" placeholder="Go to..." min="1"
+               :max="pageInfo('pending').totalPages" @keyup.enter="handlePageInput('pending')"/>
+        <button class="btn btn-secondary btn-sm" :disabled="!pendingPageInput" @click="handlePageInput('pending')">Go
+        </button>
+      </div>
+    </section>
+
+    <section v-else-if="currentTab === 'replaced'" class="section card">
+      <div class="card-head">
+        <div>
+          <h3>
+            <img src="/icons/replacement.svg" alt="Replaced" class="section-icon"/>
+            Replaced uploads
+          </h3>
+          <p class="section-copy">Thumbnails that have been replaced by newer ones.</p>
+        </div>
+        <div class="pager-summary">Page {{ pageInfo('replaced').page }} / {{ pageInfo('replaced').totalPages }}</div>
+      </div>
+
+      <div v-if="replacedItems.length === 0" class="empty-state">
+        <p>No replaced uploads right now.</p>
+      </div>
+      <div v-else class="thumbnail-grid">
+        <article v-for="item in replacedItems" :key="item.id" class="thumbnail-card">
+          <button
+              type="button"
+              class="thumbnail-link"
+              @click="openPreview(getPendingImageUrl(item.id), levelTitle(item))"
+          >
+            <img
+                :src="getPendingImageUrl(item.id)"
+                :alt="`Level ${item.level_id}`"
+                class="thumbnail-image"
+                loading="lazy"
+            />
+          </button>
+
+          <div class="thumbnail-content">
+            <strong class="level-heading">
+              {{ levelTitle(item) }}
+              <span v-if="levelAuthor(item)" class="level-author">(by {{ levelAuthor(item) }})</span>
+            </strong>
+
+            <span v-if="item.note_data" class="level-id-line">ID: {{ item.level_id }}</span>
+
+            <span class="muted timeline-line" v-if="item.replacement_note_data?.message">
+              <img src="/icons/chat.svg" alt="Comment" class="inline-icon"/>
+              <span>
+                Reason: <span style="color: #fff6d7;">{{ item.replacement_note_data.message }}</span>
+              </span>
+            </span>
+
+            <span class="muted timeline-line">
+              <img src="/icons/upload.svg" alt="Uploaded" class="inline-icon"/>
+              Uploaded {{ formatDateTime(item.upload_time) }}
+            </span>
+
+            <span class="muted timeline-line">
+              <img src="/icons/replacement.svg" alt="Replaced" class="inline-icon"/>
+              Replaced {{ formatDateTime(item.replaced_at) }} by {{ item.replaced_by_username }}
+            </span>
+          </div>
+        </article>
+      </div>
+
+      <div class="pagination-controls" v-if="replacedTotalPages > 1">
+        <button
+            class="btn btn-secondary btn-sm"
+            title="First page"
+            :disabled="pageInfo('replaced').page === 1"
+            @click="goToFirstPage('replaced')"
+        >
+          <img src="/icons/first.svg" alt="⏮" class="nav-icon"/>
+        </button>
+        <button
+            class="btn btn-secondary btn-sm"
+            :disabled="pageInfo('replaced').page === 1"
+            @click="goToPage('replaced', pageInfo('replaced').page - 1)"
+        >
+          <img src="/icons/previous.svg" alt="◂" class="nav-icon"/>
+        </button>
+        <span class="page-info">
+          Page {{ pageInfo('replaced').page }} of {{ pageInfo('replaced').totalPages }}
+        </span>
+        <button
+            class="btn btn-secondary btn-sm"
+            :disabled="pageInfo('replaced').page === pageInfo('replaced').totalPages"
+            @click="goToPage('replaced', pageInfo('replaced').page + 1)"
+        >
+          <img src="/icons/next.svg" alt="▸" class="nav-icon"/>
+        </button>
+        <button
+            class="btn btn-secondary btn-sm"
+            title="Last page"
+            :disabled="pageInfo('replaced').page === pageInfo('replaced').totalPages"
+            @click="goToLastPage('replaced')"
+        >
+          <img src="/icons/last.svg" alt="⏭" class="nav-icon"/>
+        </button>
+        <input
+            v-model="replacedPageInput"
+            class="page-input"
+            type="number"
+            placeholder="Go to..."
+            min="1"
+            :max="pageInfo('replaced').totalPages"
+            @keyup.enter="handlePageInput('replaced')"
+        />
+        <button
+            class="btn btn-secondary btn-sm"
+            :disabled="!replacedPageInput"
+            @click="handlePageInput('replaced')"
+        >
+          Go
+        </button>
       </div>
     </section>
 
@@ -420,7 +586,7 @@ onMounted(() => {
       <div class="card-head">
         <div>
           <h3>
-            <img src="/icons/cross.svg" alt="Rejected" class="section-icon" />
+            <img src="/icons/cross.svg" alt="Rejected" class="section-icon"/>
             Rejected uploads
           </h3>
           <p class="section-copy">Uploads that had issues and were rejected by moderators.</p>
@@ -438,7 +604,8 @@ onMounted(() => {
               class="thumbnail-link"
               @click="openPreview(getPendingImageUrl(item.id), levelTitle(item))"
           >
-            <img :src="getPendingImageUrl(item.id)" :alt="`Pending upload ${item.id}`" class="thumbnail-image" loading="lazy" onerror="this.style.display='none'"/>
+            <img :src="getPendingImageUrl(item.id)" :alt="`Pending upload ${item.id}`" class="thumbnail-image"
+                 loading="lazy" onerror="this.style.display='none'"/>
           </button>
           <div class="rejected-header">
             <div>
@@ -451,11 +618,11 @@ onMounted(() => {
           </div>
           <div class="rejected-body">
             <p class="reason-line">
-              <img src="/icons/cross.svg" alt="Rejected" class="inline-icon" />
+              <img src="/icons/cross.svg" alt="Rejected" class="inline-icon"/>
               <strong>Reason:</strong> {{ item.reason || 'No reason provided' }}
             </p>
             <p v-if="item.accepted_time" class="reviewed-line muted">
-              <img src="/icons/moderator.svg" alt="Reviewed" class="inline-icon" />
+              <img src="/icons/moderator.svg" alt="Reviewed" class="inline-icon"/>
               Reviewed by {{ item.accepted_by_username || 'Moderator' }} on {{ formatDateTime(item.accepted_time!) }}
             </p>
           </div>
@@ -463,30 +630,39 @@ onMounted(() => {
       </div>
 
       <div class="pagination-controls" v-if="rejectedTotalPages > 1">
-        <button class="btn btn-secondary btn-sm" title="First page" :disabled="pageInfo('rejected').page === 1" @click="goToFirstPage('rejected')">
-          <img src="/icons/first.svg" alt="⏮" class="nav-icon" />
+        <button class="btn btn-secondary btn-sm" title="First page" :disabled="pageInfo('rejected').page === 1"
+                @click="goToFirstPage('rejected')">
+          <img src="/icons/first.svg" alt="⏮" class="nav-icon"/>
         </button>
-        <button class="btn btn-secondary btn-sm" :disabled="pageInfo('rejected').page === 1" @click="goToPage('rejected', pageInfo('rejected').page - 1)">
-          <img src="/icons/previous.svg" alt="◂" class="nav-icon" />
+        <button class="btn btn-secondary btn-sm" :disabled="pageInfo('rejected').page === 1"
+                @click="goToPage('rejected', pageInfo('rejected').page - 1)">
+          <img src="/icons/previous.svg" alt="◂" class="nav-icon"/>
         </button>
         <span class="page-info">Page {{ pageInfo('rejected').page }} of {{ pageInfo('rejected').totalPages }}</span>
-        <button class="btn btn-secondary btn-sm" :disabled="pageInfo('rejected').page === pageInfo('rejected').totalPages" @click="goToPage('rejected', pageInfo('rejected').page + 1)">
-          <img src="/icons/next.svg" alt="▸" class="nav-icon" />
+        <button class="btn btn-secondary btn-sm"
+                :disabled="pageInfo('rejected').page === pageInfo('rejected').totalPages"
+                @click="goToPage('rejected', pageInfo('rejected').page + 1)">
+          <img src="/icons/next.svg" alt="▸" class="nav-icon"/>
         </button>
-        <button class="btn btn-secondary btn-sm" title="Last page" :disabled="pageInfo('rejected').page === pageInfo('rejected').totalPages" @click="goToLastPage('rejected')">
-          <img src="/icons/last.svg" alt="⏭" class="nav-icon" />
+        <button class="btn btn-secondary btn-sm" title="Last page"
+                :disabled="pageInfo('rejected').page === pageInfo('rejected').totalPages"
+                @click="goToLastPage('rejected')">
+          <img src="/icons/last.svg" alt="⏭" class="nav-icon"/>
         </button>
-        <input v-model="rejectedPageInput" class="page-input" type="number" placeholder="Go to..." min="1" :max="pageInfo('rejected').totalPages" @keyup.enter="handlePageInput('rejected')" />
-        <button class="btn btn-secondary btn-sm" :disabled="!rejectedPageInput" @click="handlePageInput('rejected')">Go</button>
+        <input v-model="rejectedPageInput" class="page-input" type="number" placeholder="Go to..." min="1"
+               :max="pageInfo('rejected').totalPages" @keyup.enter="handlePageInput('rejected')"/>
+        <button class="btn btn-secondary btn-sm" :disabled="!rejectedPageInput" @click="handlePageInput('rejected')">
+          Go
+        </button>
       </div>
     </section>
 
     <Modal :open="previewOpen" :title="previewTitle" dialog-class="modal-dialog--fullscreen" @close="closePreview">
-      <img :src="previewSrc" :alt="previewTitle" class="preview-image" />
+      <img :src="previewSrc" :alt="previewTitle" class="preview-image"/>
     </Modal>
   </div>
 
-  <LoadingCircle backdrop v-if="refreshing" />
+  <LoadingCircle backdrop v-if="refreshing"/>
 </template>
 
 <style scoped>
@@ -532,7 +708,7 @@ onMounted(() => {
 
 .hero-metrics {
   display: grid;
-  grid-template-columns: repeat(3, minmax(90px, 1fr));
+  grid-template-columns: repeat(4, minmax(90px, 1fr));
   gap: 12px;
 }
 
@@ -947,7 +1123,7 @@ onMounted(() => {
 
   .hero-metrics {
     width: 100%;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 
   .rejected-grid {

@@ -120,9 +120,22 @@ export interface MyThumbnailRejectedItem {
   accepted_by_username: string | null;
 }
 
+export interface MyThumbnailReplacedItem {
+  id: number;
+  level_id: number;
+  upload_time: string;
+  accepted_time: string | null;
+  note_data: NoteData | null;
+  replaced_by_upload_id: number;
+  replaced_at: string;
+  replaced_by_username: string;
+  replacement_note_data: NoteData | null;
+}
+
 export interface MyUploadsSummaryResponse {
   active: number;
   pending: number;
+  replaced: number;
   rejected: number;
 }
 
