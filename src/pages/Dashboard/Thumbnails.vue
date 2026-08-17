@@ -55,10 +55,16 @@ const replacedTotalPages = computed(() => totalPages(replacedTotal.value));
 const rejectedTotalPages = computed(() => totalPages(rejectedTotal.value));
 
 function levelTitle(level: MyThumbnailActiveItem | PendingItem | MyThumbnailRejectedItem | MyThumbnailReplacedItem): string {
+  if ('replacement_note_data' in level && level.replacement_note_data?.level_name) {
+    return level.replacement_note_data.level_name;
+  }
   return level.note_data?.level_name || `ID: ${level.level_id}`;
 }
 
 function levelAuthor(level: MyThumbnailActiveItem | PendingItem | MyThumbnailRejectedItem | MyThumbnailReplacedItem): string | null {
+  if ('replacement_note_data' in level && level.replacement_note_data?.creator_name) {
+    return level.replacement_note_data.creator_name;
+  }
   return level.note_data?.creator_name || null;
 }
 
