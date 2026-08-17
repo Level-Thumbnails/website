@@ -498,6 +498,7 @@ onMounted(() => {
                 :alt="`Level ${item.level_id}`"
                 class="thumbnail-image"
                 loading="lazy"
+                onerror="this.style.display='none'"
             />
           </button>
 
