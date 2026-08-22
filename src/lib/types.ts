@@ -9,6 +9,8 @@ export interface UserStats {
   level_count: number;
   accepted_level_count: number;
   active_thumbnail_count: number;
+  energy_left: number;
+  energy_refill_time: number | null;
 }
 
 export interface StatsResponse {
@@ -44,9 +46,23 @@ export interface StatsHistoryPoint {
   accepted_uploads_total: number;
 }
 
+export interface EnergyConfig {
+  enabled: boolean;
+  max_millipoints: number;
+  refill_rate: number;
+  base_cost: number;
+  min_cost: number;
+  download_weight: number;
+  popularity_tiers: [number, number][];
+  rated_weight: number;
+  creator_mult: number;
+  creator_min_downloads: number;
+}
+
 export interface ServerSettings {
   pause_submissions: boolean;
   min_supported_client: string;
+  energy_config: EnergyConfig;
 }
 
 export const RATING_NAMES = ['NA', 'Rated', 'Featured', 'Epic', 'Legendary', 'Mythic'] as const;

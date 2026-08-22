@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import {ref, watch} from "vue";
+import {computed, ref, watch} from "vue";
 import SessionManager from "../../managers/session.ts";
-import type { ServerSettings } from "../../lib/types";
-import { fetchJson } from "../../lib/utils.ts";
-import { alertModal, confirmModal } from "../../lib/modals";
+import type {ServerSettings} from "../../lib/types";
+import {fetchJson} from "../../lib/utils.ts";
+import {alertModal, confirmModal} from "../../lib/modals";
 import SettingsManager, {type UserSettings} from "../../managers/settings.ts";
+import Modal from "../../components/Modal.vue";
 
 const user = ref(SessionManager.getUser()!);
 const token = ref("");
@@ -25,8 +26,8 @@ function downloadMyData() {
 
 async function deleteAccount() {
   await confirmModal(
-    'Delete My Account',
-    'Are you sure you want to delete your account and all data associated with it? This action cannot be undone.'
+      'Delete My Account',
+      'Are you sure you want to delete your account and all data associated with it? This action cannot be undone.'
   );
 }
 
@@ -69,19 +70,30 @@ function verifyAccount() {
 // if admin, fetch server settings
 const settings = ref<ServerSettings | null>(null);
 const pendingSettings = ref<ServerSettings | null>(null);
+const pendingEnergyConfig = ref<ServerSettings['energy_config'] | null>(null);
+const energySettingsModalOpen = ref(false);
 if (hasServerSettingsPerms()) {
   fetchJson<ServerSettings>('/admin/settings')
       .then((data) => {
         settings.value = data;
         pendingSettings.value = {...data};
+        pendingEnergyConfig.value = {...data.energy_config};
       })
       .catch(error => {
         console.error("Error fetching server settings:", error);
       });
 }
 
+const isDirty = computed(() => {
+  return JSON.stringify(settings.value) !== JSON.stringify(pendingSettings.value) ||
+         JSON.stringify(pendingEnergyConfig.value) !== JSON.stringify(settings.value?.energy_config);
+});
+
 async function updateServerSettings(silent: boolean) {
   if (!pendingSettings.value) return;
+
+  pendingEnergyConfig.value!.popularity_tiers.sort((a, b) => b[0] - a[0]);
+  pendingSettings.value.energy_config = pendingEnergyConfig.value!;
 
   try {
     await fetchJson('/admin/settings', {
@@ -103,7 +115,7 @@ async function updateServerSettings(silent: boolean) {
 const userSettings = ref<UserSettings>(SettingsManager.getSettings());
 watch(userSettings, (newSettings) => {
   SettingsManager.saveSettings(newSettings);
-}, { deep: true });
+}, {deep: true});
 
 </script>
 
@@ -146,15 +158,20 @@ watch(userSettings, (newSettings) => {
         <label for="minClient" class="setting-label">Minimum Mod Version:</label>
         <input id="minClient" type="text"
                v-model="pendingSettings.min_supported_client" class="setting-input link-token"
-               placeholder="e.g. v2.1.0" pattern="^v\d+\.\d+\.\d+(?:-(?:alpha|beta|prerelease|pr)(?:\.\d+)?)?$" />
+               placeholder="e.g. v2.1.0" pattern="^v\d+\.\d+\.\d+(?:-(?:alpha|beta|prerelease|pr)(?:\.\d+)?)?$"/>
+      </div>
+      <div class="d-flex mt-1 setting-row">
+        <button class="btn flex-1 btn-dark" @click="energySettingsModalOpen = true">
+          Edit Energy Settings
+        </button>
       </div>
       <div class="d-flex gap-1 mt-1">
         <button class="btn btn-primary flex-1" @click="updateServerSettings(false)"
-                :disabled="JSON.stringify(settings) === JSON.stringify(pendingSettings)">
+                :disabled="!isDirty">
           Save Changes
         </button>
         <button class="btn btn-secondary flex-1" @click="updateServerSettings(true)"
-                :disabled="JSON.stringify(settings) === JSON.stringify(pendingSettings)">
+                :disabled="!isDirty">
           Save Silently
         </button>
       </div>
@@ -165,14 +182,18 @@ watch(userSettings, (newSettings) => {
         <button class="btn flex-1"
                 :class="{ 'btn-danger': !userSettings.confirm_accept, 'btn-success': userSettings.confirm_accept }"
                 @click="userSettings.confirm_accept = !userSettings.confirm_accept;">
-          {{ userSettings.confirm_accept ? "Confirmation for accept is enabled" : "Confirmation for accept is disabled" }}
+          {{
+            userSettings.confirm_accept ? "Confirmation for accept is enabled" : "Confirmation for accept is disabled"
+          }}
         </button>
       </div>
       <div class="d-flex mt-1">
         <button class="btn flex-1"
                 :class="{ 'btn-danger': !userSettings.confirm_reject, 'btn-success': userSettings.confirm_reject }"
                 @click="userSettings.confirm_reject = !userSettings.confirm_reject;">
-          {{ userSettings.confirm_reject ? "Confirmation for reject is enabled" : "Confirmation for reject is disabled" }}
+          {{
+            userSettings.confirm_reject ? "Confirmation for reject is enabled" : "Confirmation for reject is disabled"
+          }}
         </button>
       </div>
     </section>
@@ -198,6 +219,85 @@ watch(userSettings, (newSettings) => {
       </button>
     </section>
   </div>
+  <Modal
+      title="Energy Settings" :open="energySettingsModalOpen"
+      :buttons="[{ label: 'Confirm' }]"
+      @close="energySettingsModalOpen = false"
+      @action="_ => energySettingsModalOpen = false"
+  >
+    <div class="d-flex setting-row">
+      <label class="setting-label">Energy System:</label>
+      <button class="btn flex-1"
+              :class="{ 'btn-danger': !pendingEnergyConfig!.enabled, 'btn-success': pendingEnergyConfig!.enabled }"
+              @click="pendingEnergyConfig!.enabled = !pendingEnergyConfig!.enabled">
+        {{ pendingEnergyConfig!.enabled ? "Enabled" : "Disabled" }}
+      </button>
+    </div>
+
+    <div class="d-flex setting-row">
+      <label for="maxMillipoints" class="setting-label">Max Energy:</label>
+      <input id="maxMillipoints" type="number" v-model.number="pendingEnergyConfig!.max_millipoints"
+             class="setting-input link-token"/>
+    </div>
+
+    <div class="d-flex setting-row">
+      <label for="refillRate" class="setting-label">Refill Rate:</label>
+      <input id="refillRate" type="number"
+             v-model.number="pendingEnergyConfig!.refill_rate" class="setting-input link-token"/>
+    </div>
+
+    <div class="d-flex setting-row">
+      <label for="baseCost" class="setting-label">Base Cost:</label>
+      <input id="baseCost" type="number"
+             v-model.number="pendingEnergyConfig!.base_cost" class="setting-input link-token"/>
+    </div>
+
+    <div class="d-flex setting-row">
+      <label for="minCost" class="setting-label">Min Cost:</label>
+      <input id="minCost" type="number"
+             v-model.number="pendingEnergyConfig!.min_cost" class="setting-input link-token"/>
+    </div>
+
+    <div class="d-flex setting-row">
+      <label for="downloadWeight" class="setting-label">Download Weight:</label>
+      <input id="downloadWeight" type="number" step="0.01"
+             v-model.number="pendingEnergyConfig!.download_weight" class="setting-input link-token"/>
+    </div>
+
+    <div class="d-flex setting-row">
+      <label for="ratedWeight" class="setting-label">Rated Weight:</label>
+      <input id="ratedWeight" type="number" step="0.01"
+             v-model.number="pendingEnergyConfig!.rated_weight" class="setting-input link-token"/>
+    </div>
+
+    <div class="d-flex setting-row">
+      <label for="creatorMult" class="setting-label">Creator Mult:</label>
+      <input id="creatorMult" type="number" step="0.01"
+             v-model.number="pendingEnergyConfig!.creator_mult" class="setting-input link-token"/>
+    </div>
+
+    <div class="d-flex setting-row">
+      <label for="creatorMinDL" class="setting-label">Creator Min Downloads:</label>
+      <input id="creatorMinDL" type="number"
+             v-model.number="pendingEnergyConfig!.creator_min_downloads" class="setting-input link-token"/>
+    </div>
+
+    <div>
+      <p>Popularity Tiers (Score / Weight):</p>
+      <div v-for="(tier, index) in pendingEnergyConfig!.popularity_tiers" :key="index"
+           class="d-flex gap-05 mb-05 align-center">
+        <input type="number" v-model.number="tier[0]" class="setting-input link-token" placeholder="Score"/>
+        <input type="number" step="0.01" v-model.number="tier[1]" class="setting-input link-token"
+               placeholder="Weight"/>
+        <button class="btn btn-danger" @click="pendingEnergyConfig!.popularity_tiers.splice(index, 1)">X
+        </button>
+      </div>
+      <button class="btn btn-secondary w-100 mt-1"
+              @click="pendingEnergyConfig!.popularity_tiers.push([0, 0.0])">
+        Add Tier
+      </button>
+    </div>
+  </Modal>
 </template>
 
 <style scoped>

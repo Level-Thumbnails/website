@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import {computed, onMounted, onUnmounted, ref} from 'vue';
 import type { ChartConfiguration } from 'chart.js';
 import ChartCanvas from '../../components/ChartCanvas.vue';
 import LazyCounter from '../../components/LazyCounter.vue';
@@ -14,6 +14,7 @@ const user = ref<UserStats | null>(null);
 const stats = ref<StatsResponse | null>(null);
 const userHistory = ref<UserHistoryPoint[]>([]);
 const statsHistory = ref<StatsHistoryPoint[]>([]);
+const energyCountdown = ref<HTMLElement | null>(null);
 
 const acceptedRate = computed(() => {
   if (!user.value || user.value.upload_count === 0) return 0;
@@ -216,6 +217,7 @@ const statsChart = computed<ChartConfiguration<'line', number[], string>>(() => 
   },
 }));
 
+let energyInterval: number | null = null;
 async function loadDashboard() {
   loading.value = true;
   error.value = null;
@@ -241,6 +243,33 @@ async function loadDashboard() {
     statsHistory.value = statsHistoryResult.status === 'fulfilled'
       ? (unwrap<StatsHistoryPoint[]>(statsHistoryResult.value) || [])
       : [];
+
+    const refillTime = user.value.energy_refill_time;
+    if (refillTime) {
+      const endTime = Date.now() + refillTime * 1000;
+
+      const updateCountdown = () => {
+        const remainingSeconds = Math.max(0, Math.floor((endTime - Date.now()) / 1000));
+
+        const hours = Math.floor(remainingSeconds / 3600);
+        const minutes = Math.floor((remainingSeconds % 3600) / 60);
+        const seconds = remainingSeconds % 60;
+
+        let countdownText = '';
+        if (hours > 0) {
+          countdownText = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+        } else {
+          countdownText = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+        }
+
+        if (energyCountdown.value) {
+          energyCountdown.value!.innerText = `(${countdownText})`;
+        }
+      };
+
+      energyInterval = setInterval(updateCountdown, 1000);
+      updateCountdown();
+    }
   } catch (err) {
     error.value = err instanceof Error ? err.message : 'Failed to load dashboard';
   } finally {
@@ -249,6 +278,12 @@ async function loadDashboard() {
 }
 
 onMounted(loadDashboard);
+onUnmounted(() => {
+  if (energyInterval) {
+    clearInterval(energyInterval);
+    energyInterval = null;
+  }
+});
 </script>
 
 <template>
@@ -274,8 +309,9 @@ onMounted(loadDashboard);
             <strong>{{ acceptedRate.toFixed(1) }}%</strong>
           </div>
           <div class="hero-metric">
-            <span class="metric-label">Active</span>
-            <strong>{{ user!.active_thumbnail_count.toLocaleString() }}</strong>
+            <span class="metric-label">Film</span>
+            <strong>{{ (user!.energy_left / 1000).toFixed(1) }}</strong>
+            <span ref="energyCountdown" class="expected-subtle"></span>
           </div>
         </div>
       </header>
