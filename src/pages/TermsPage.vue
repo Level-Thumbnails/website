@@ -160,7 +160,7 @@ import Container from "../components/Container.vue";
     <p>
       The Level Thumbnails platform, codebase, and branding are protected under open-source and applicable intellectual
       property laws. You may not misrepresent or misuse the project.
-      API and web interface is licensed under the Apache License 2.0, which allows for free use and modification
+      The API and web interface are licensed under the Apache License 2.0, which allows for free use and modification
       as long as you comply with the license terms.
     </p>
 
