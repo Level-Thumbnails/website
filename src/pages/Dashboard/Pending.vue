@@ -22,9 +22,11 @@ const REJECT_PRESETS = [
   "No Glow",
   "No Particles",
   "Cutoff Deco",
+  "Cutoff Wave Trail",
   "Title Card",
   "Good thumbnail already accepted",
-  "Solid Wave Trail"
+  "Solid Wave Trail",
+  "Leaked level"
 ];
 
 const loading = ref(true);
