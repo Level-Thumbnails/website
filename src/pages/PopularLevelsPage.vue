@@ -18,8 +18,7 @@ type PeriodOption = {
 const PERIOD_OPTIONS: PeriodOption[] = [
   { key: 'day', label: '24 hours' },
   { key: 'week', label: '7 days' },
-  // TODO: unlock 30-day period once we have enough data (in 3 weeks from now)
-  // { key: 'month', label: '30 days' },
+  { key: 'month', label: '30 days' },
 ];
 
 function readInitialPeriod(): Period {
